@@ -6,6 +6,7 @@
 ## When running for the first time, create MongoDB indexes:  
 `> db.users.createIndex({id: 1})`  
 `> db.users.createIndex({'counts.followed_by': 1})`  
+`> db.users.createIndex({'counts.followeds': 1})`
 
 ## ToDo
 * Send E-Mail on Error

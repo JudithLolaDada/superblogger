@@ -5,6 +5,7 @@ import pymongo
 import subprocess
 import time
 import os
+from random import randint
 
 crawler = os.environ['CRAWLER']
 
@@ -14,7 +15,7 @@ seed_user_ids = ["208560325", "247944034"] #Kloe, Beyoncé
 
 # MongoDB 
 db = pymongo.MongoClient('127.0.0.1', 27017).superblogger
-db = pymongo.MongoClient(os.environ.get('MONGODB') or "mongodb://127.0.0.1").superblogger
+#db = pymongo.MongoClient(os.environ.get('MONGODB') or "mongodb://127.0.0.1").superblogger
 
 # Fetches the a JSON endpoint at `url`.
 # If the API Rate Limit is hit, sleeps and retries.
@@ -127,10 +128,10 @@ fetch_user(seed_user_ids[0]) # TODO Randomize
 # Loop until there are no users in the database any more that satisfy the following conditions
 # FollowedBy > 1M and never crawled.
 while True:
-    next_users = db.users.find({'counts.followed_by': {'$gte': 1000*1000}, 'follows': {'$exists': False}, '_private': None}).sort([('counts.follows', pymongo.ASCENDING)]).limit(1)
+    next_users = db.users.find({'counts.followed_by': {'$gte': 1000*1000}, 'follows': {'$exists': False}, '_private': None, '$or': [{'_inProgress': False}, {'_inProgress': None}]}).sort([('counts.follows', pymongo.ASCENDING)])
     if next_users.count() == 0:
         break
     else:
-        fetch_user(next_users[0]['id'])
+        fetch_user(next_users[randint(0, min(99, next_users.count()-1))]['id'])
         
 print("If we get here... I'm like winning!")
