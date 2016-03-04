@@ -6,7 +6,7 @@ import subprocess
 import time
 import os
 
-crawler = subprocess.check_output('hostname').decode('utf-8').strip()
+crawler = os.environ['CRAWLER']
 
 # Instagram API
 access_token = os.environ['ACCESS_TOKEN']
@@ -23,7 +23,9 @@ def get_json(url):
         try:
             response = urllib.request.urlopen(url)
             response_body = response.read().decode('utf-8')
-            print(response.info()['X-Ratelimit-Remaining']) 
+            remaining_requests = response.info()['X-Ratelimit-Remaining']
+            if int(remaining_requests)%100 == 0:
+                print("Remaining Requests: ", remaining_requests) 
             return json.loads(response_body)
         except urllib.error.HTTPError as e:
             if e.code == 429:
@@ -33,7 +35,7 @@ def get_json(url):
             if e.code == 400:
                 error_response = e.read().decode('utf-8')
                 error_json = json.loads(error_response)
-                if 'meta' in error_json and error_json['meta']['error_type'] == 'APINotAllowedError':
+                if 'meta' in error_json and (error_json['meta']['error_type'] == 'APINotAllowedError' or error_json['meta']['error_type'] == 'APINotFoundError'):
                     #print("A private user was found!😡");
                     return None
             raise e
@@ -74,6 +76,8 @@ def fetch_user(user_id):
         {'$set': response_data['data']}, 
         upsert=True)
     
+    print(" -> follows: ", user['counts']['follows'])
+
     url = "https://api.instagram.com/v1/users/"+user_id+"/follows?access_token=" + access_token
     while url != None:
         response_data = get_json(url)
@@ -116,16 +120,17 @@ def fetch_user(user_id):
 
 # Initialization
 print("This is ", crawler)
-print("Deleted", db.users.delete_many({'_crawler': crawler, '_inProgress': True}).deleted_count, "users, which were not fully processed")
+#print("Deleted", db.users.delete_many({'_crawler': crawler, '_inProgress': True}).deleted_count, "users, which were not fully processed")
+print("Reset", db.users.update_many({'_crawler': crawler, '_inProgress': True}, {'$unset': {'follows': '', '_inProgress': ''}}).modified_count, "users, which were not fully processed")
 fetch_user(seed_user_ids[0]) # TODO Randomize
 
 # Loop until there are no users in the database any more that satisfy the following conditions
 # FollowedBy > 1M and never crawled.
 while True:
-    next_user = db.users.find_one({'counts.followed_by': {'$gte': 1000*1000}, 'follows': {'$exists': False}, '_private': None})
-    if next_user == None:
+    next_users = db.users.find({'counts.followed_by': {'$gte': 1000*1000}, 'follows': {'$exists': False}, '_private': None}).sort([('counts.follows', pymongo.ASCENDING)]).limit(1)
+    if next_users.count() == 0:
         break
     else:
-        fetch_user(next_user['id'])
+        fetch_user(next_users[0]['id'])
         
 print("If we get here... I'm like winning!")
