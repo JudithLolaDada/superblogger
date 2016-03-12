@@ -8,6 +8,7 @@ import os
 from random import randint
 
 crawler = os.environ['CRAWLER']
+fetch_details = True if os.environ.get('FETCH_DETAILS') != None else False
 
 # Instagram API
 access_token = os.environ['ACCESS_TOKEN']
@@ -88,26 +89,33 @@ def fetch_user(user_id):
             db.users.update_one(
                 {'id': user_id},
                 {'$addToSet': {'follows': str(followed_user['id'])}})
-                
-            # Save user 
-            if db.users.count({'id': str(followed_user['id'])}) == 0:
-                response_data_details = get_json("https://api.instagram.com/v1/users/"+str(followed_user['id'])+"?access_token=" + access_token)
-                if response_data_details != None:
-                    followed_user_details = response_data_details['data']
-                    followed_user_details['id'] = str(followed_user_details['id'])
-                    followed_user_details['_crawler'] = crawler
+                  
+            if fetch_details:
+                # Save user 
+                if db.users.count({'id': str(followed_user['id'])}) == 0:
+                    response_data_details = get_json("https://api.instagram.com/v1/users/"+str(followed_user['id'])+"?access_token=" + access_token)
+                    if response_data_details != None:
+                        followed_user_details = response_data_details['data']
+                        followed_user_details['id'] = str(followed_user_details['id'])
+                        followed_user_details['_crawler'] = crawler
                     
-                    db.users.update_one(
-                        {'id': str(followed_user_details['id'])}, 
-                        {'$set': followed_user_details}, 
-                        upsert=True)
-                else:
-                    followed_user['_private'] = True
-                    db.users.update_one(
-                        {'id': str(followed_user['id'])}, 
-                        {'$set': followed_user}, 
-                        upsert=True)
-                
+                        db.users.update_one(
+                            {'id': str(followed_user_details['id'])}, 
+                            {'$set': followed_user_details}, 
+                            upsert=True)
+                    else:
+                        followed_user['_private'] = True
+                        db.users.update_one(
+                            {'id': str(followed_user['id'])}, 
+                            {'$set': followed_user}, 
+                            upsert=True)
+            else:
+                db.users.update_one(
+                    {'id': str(followed_user['id'])}, 
+                    {'$set': followed_user}, 
+                    upsert=True)        
+
+        
         if 'pagination' in response_data and 'next_url' in response_data['pagination']:
             url = response_data['pagination']['next_url']
         else:
@@ -128,7 +136,7 @@ fetch_user(seed_user_ids[0]) # TODO Randomize
 # Loop until there are no users in the database any more that satisfy the following conditions
 # FollowedBy > 1M and never crawled.
 while True:
-    next_users = db.users.find({'counts.followed_by': {'$gte': 1000*1000}, 'follows': {'$exists': False}, '_private': None, '$or': [{'_inProgress': False}, {'_inProgress': None}]}).sort([('counts.follows', pymongo.ASCENDING)])
+    next_users = db.users.find({'counts.follows': {'$lte': 10000}, 'counts.followed_by': {'$gte': 1000*1000}, 'follows': {'$exists': False}, '_private': None, '$or': [{'_inProgress': False}, {'_inProgress': None}]}).sort([('counts.follows', pymongo.ASCENDING)])
     if next_users.count() == 0:
         break
     else:
