@@ -8,7 +8,3 @@
 `> db.users.createIndex({'counts.followed_by': 1})`  
 `> db.users.createIndex({'counts.followeds': 1})`
 
-## ToDo
-* Send E-Mail on Error
-* Optimize Output (Rate Limit)
-* Multi Crawler
